@@ -90,7 +90,7 @@ fn unquote(v: &str) -> String {
 
 /// Last non-empty path segment of the URL, percent-decoded.
 pub fn filename_from_url(url: &Url) -> Option<String> {
-    let seg = url.path_segments()?.filter(|s| !s.is_empty()).last()?;
+    let seg = url.path_segments()?.rev().find(|s| !s.is_empty())?;
     let decoded = percent_decode_str(seg).decode_utf8_lossy().into_owned();
     if decoded.is_empty() {
         None

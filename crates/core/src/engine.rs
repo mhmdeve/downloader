@@ -180,9 +180,8 @@ fn validators_match(a: &ProbeInfo, b: &ProbeInfo) -> bool {
     if a.size != b.size {
         return false;
     }
-    match (&a.etag, &b.etag) {
-        (Some(x), Some(y)) => return x == y,
-        _ => {}
+    if let (Some(x), Some(y)) = (&a.etag, &b.etag) {
+        return x == y;
     }
     match (&a.last_modified, &b.last_modified) {
         (Some(x), Some(y)) => x == y,

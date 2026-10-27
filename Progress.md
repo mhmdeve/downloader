@@ -60,7 +60,7 @@ Progress.md             this file
 - [x] **M1** Skeleton: workspace, Progress.md, README, LICENSE, .gitignore
 - [x] **M2** Core: types, categories, filename/URL helpers, probe (HEAD/Range, Content-Disposition)
 - [x] **M3** Core: segmented downloader (dynamic split, retry, resume sidecar) + tests against a local range server
-- [ ] **M4** Core: manager (queue, max-concurrent, speed limiter, scheduler, history, events)
+- [x] **M4** Core: manager (queue, max-concurrent, speed limiter, scheduler, history, events)
 - [ ] **M5** Core: HLS (.m3u8) downloader
 - [ ] **M6** IPC server (loopback + token) + `native-host` binary
 - [ ] **M7** Tauri app shell: commands, tray, single-instance, native-host registration, notifications
@@ -79,6 +79,8 @@ Append-only. Format: `YYYY-MM-DD [Mx] what was done — commit sha`.
 - 2026-10-27 [M2] `crates/core`: error, types (RequestInfo/Status/Segment), categories, filename (Content-Disposition RFC 6266, sanitising, unique paths, `.idl` sidecar path), net (client + request decoration, identity encoding), probe (GET Range 0-0 -> size/ranges/name/validators). 7 unit tests pass. NOTE: workspace `members` currently only lists `crates/core`; re-add `crates/native-host` and `src-tauri` as they are created (M6/M7).
 
 - 2026-10-27 [M3] `crates/core/src/engine.rs` + `limiter.rs`: segmented downloader. Pre-allocated `<file>.part`, per-connection buffered positional writes (pos = flushed bytes only), dynamic splitting of the busiest segment, retry w/ backoff (8x, resets on progress), `If-Range` + Content-Range validation, fallback to original URL if redirect target expires, sidecar `<file>.idl` saved every 1 s, resume validates size/ETag/Last-Modified else restarts, pause/cancel via `watch<Signal>`, unknown-length + no-range servers handled, global token-bucket limiter. Tests: `crates/core/tests/engine.rs` (11 integration tests against a scriptable local server in `tests/common/mod.rs`) all pass.
+
+- 2026-10-27 [M4] `settings.rs` (+ per-category dirs, `extra` map for UI prefs) and `manager.rs`: `Manager::new(data_dir, tokio Handle)`; `inspect()` for the file-info dialog, `add()` (probe if no name, category folders, unique dest incl. queued items, duplicate-URL resume), `pause/resume/*_all/remove(delete_file)/clear_completed/set_schedule/update_request/update_settings`, queue with `max_concurrent`, scheduler (`scheduled_at`, pumped every 5 s), global speed limit, 4 Hz `Event::Progress` stream (speed EMA, ETA, connections), history in `history.json` (0600 on unix), in-flight items restored as Paused (or Queued if `auto_resume`). 11 integration tests in `tests/manager.rs` pass.
 
 ## Known issues / TODO
 

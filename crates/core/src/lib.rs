@@ -10,10 +10,12 @@
 pub mod categories;
 pub mod engine;
 pub mod limiter;
+pub mod manager;
 pub mod error;
 pub mod filename;
 pub mod net;
 pub mod probe;
+pub mod settings;
 pub mod types;
 
 pub use error::{Error, Result};
