@@ -89,3 +89,36 @@ Append-only. Format: `YYYY-MM-DD [Mx] what was done — commit sha`.
 - HLS: separate audio renditions (`EXT-X-MEDIA`) and DASH (`.mpd`) are not handled (document as limitation).
 - Disk-space pre-check not implemented (ENOSPC surfaces as an I/O error). Candidate for M4/M7.
 - Engine writes the whole `Request` (cookies!) into the `.idl` sidecar; consider stripping cookies at rest in M4.
+
+## M6 implementation contract (resume checkpoint)
+
+M6 is **not complete** until the host and app-side service are implemented and protocol-tested.
+Do not tick the milestone merely because these acceptance criteria are documented.
+
+### IPC security and protocol requirements
+
+- Bind the app service only to IPv4 loopback (127.0.0.1), never 0.0.0.0 or a wildcard.
+- Generate a high-entropy per-user bearer token when the app starts. Keep it outside the repository and pass it to the native host through a private local configuration channel; never put it in command-line arguments or logs.
+- Require a token on every request and compare it without early-exit string comparison where practical. Reject requests from untrusted origins and limit request/header/body sizes.
+- Use a versioned, newline-delimited JSON protocol with explicit request IDs and structured error responses. Bound each line and the number of concurrent clients.
+- Implement only the minimal command surface needed by the extension: health/version, enqueue a download, inspect a URL, and query status. Do not expose arbitrary filesystem operations, shell execution, or general-purpose URL fetch/proxy functionality.
+- Parse native-messaging frames as a 4-byte little-endian length followed by UTF-8 JSON. Enforce the browser protocol maximum frame size, reject truncated/oversized frames, write only framed protocol messages to stdout, and send diagnostics to stderr.
+- Validate URLs as HTTP(S); reject embedded credentials and unsupported schemes. Treat browser-supplied cookies/headers as sensitive and never log them.
+- Avoid SSRF: the IPC API is for browser-to-local-app actions, not a generic proxy. Loopback, link-local, and private-network URLs require an explicit documented policy so a page cannot trick the app into accessing local services.
+- Add protocol tests for malformed frames, oversized input, missing/wrong token, invalid JSON, wrong protocol version, invalid URLs, and app-not-running behavior.
+
+### Required M6 implementation sequence
+
+1. Re-read Cargo.toml, the core manager public API, and Progress.md; confirm main HEAD before writing.
+2. Add crates/native-host as a small std-only Rust binary. Start with correct frame parsing/writing and tests; keep dependencies minimal.
+3. Add the loopback server/token implementation to a separate crate/module used by the app, with narrow command routing to idl-core::Manager.
+4. Add an explicit local configuration/bootstrap contract between the desktop app and native host. Do not store reusable IPC tokens in committed files.
+5. Re-add both crates to the workspace; update the lockfile using Cargo and run cargo test --workspace locally.
+6. Mark M6 complete only after protocol tests pass and record the test command/result and commit SHA. If the environment cannot run Cargo, report the limitation and leave M6 unchecked.
+
+### Current resume point
+
+- Verified main at 369bca3643fd8f6021a4e1107fcbc6a0f1640f11 ([M5] Core: HLS downloads with AES-128, fMP4, resume; manager integration + tests).
+- Actual tree contains only crates/core; crates/native-host and src-tauri do not exist yet. The workspace includes only crates/core.
+- Next action: implement the native-messaging host frame parser and focused tests under crates/native-host, then create the app-side IPC crate/server. Do not mark an integration complete until it compiles and the end-to-end protocol is exercised.
+
