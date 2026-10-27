@@ -24,6 +24,7 @@
   },
   "bundle": {
     "active": true,
+    "icon": [],
     "category": "Utility",
     "shortDescription": "Cross-platform download manager",
     "targets": "all"
