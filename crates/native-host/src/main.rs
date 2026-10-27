@@ -75,14 +75,14 @@ fn forward_request(request: &Value, config: &BridgeConfig) -> Value {
     if payload.len() + 1 > MAX_IPC_LINE_BYTES {
         return bridge_error(request, "REQUEST_TOO_LARGE", "Request exceeds the IPC limit");
     }
-    payload.push(b'\\n');
+    payload.push(b'\n');
     if stream.write_all(&payload).is_err() {
         return bridge_error(request, "APP_BRIDGE_UNAVAILABLE", "Could not contact the desktop app");
     }
 
     let mut response = Vec::new();
-    let read_result = BufReader::new(stream).take((MAX_IPC_LINE_BYTES + 1) as u64).read_until(b'\\n', &mut response);
-    if read_result.is_err() || response.is_empty() || response.len() > MAX_IPC_LINE_BYTES || response.last() != Some(&b'\\n') {
+    let read_result = BufReader::new(stream).take((MAX_IPC_LINE_BYTES + 1) as u64).read_until(b'\n', &mut response);
+    if read_result.is_err() || response.is_empty() || response.len() > MAX_IPC_LINE_BYTES || response.last() != Some(&b'\n') {
         return bridge_error(request, "APP_BRIDGE_UNAVAILABLE", "The desktop app returned no valid response");
     }
     response.pop();
