@@ -2,15 +2,95 @@
 //!
 //! Frames are a 4-byte little-endian length followed by a UTF-8 JSON payload.
 //! Standard output is reserved for framed responses; diagnostics go to standard error.
-//! The authenticated desktop IPC bridge is not connected yet; valid requests fail closed.
+//! The host reads a private per-user bootstrap file and forwards requests to the desktop app.
 
-use std::io::{self, Read, Write};
+use std::{fs, io::{self, BufRead, BufReader, Read, Write}, net::{SocketAddr, TcpStream}, path::PathBuf, time::Duration};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use url::Url;
 
 const MAX_MESSAGE_BYTES: usize = 1024 * 1024;
 const PROTOCOL_VERSION: u64 = 1;
 const ALLOWED_COMMANDS: &[&str] = &["health", "inspect", "enqueue", "status"];
+const MAX_IPC_LINE_BYTES: usize = 64 * 1024;
+const IPC_TIMEOUT: Duration = Duration::from_secs(3);
+
+#[derive(Debug, Deserialize)]
+struct BridgeConfig {
+    port: u16,
+    token: String,
+}
+
+fn config_path() -> io::Result<PathBuf> {
+    let base = dirs::config_dir().ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "user config directory unavailable"))?;
+    Ok(base.join("internet-downloader").join("ipc.json"))
+}
+
+fn load_config() -> io::Result<BridgeConfig> {
+    let path = config_path()?;
+    let metadata = fs::symlink_metadata(&path)?;
+    if !metadata.is_file() || metadata.len() > 4096 {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid IPC bootstrap file"));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if metadata.permissions().mode() & 0o077 != 0 {
+            return Err(io::Error::new(io::ErrorKind::PermissionDenied, "IPC bootstrap file permissions are too broad"));
+        }
+    }
+    let raw = fs::read(path)?;
+    let config: BridgeConfig = serde_json::from_slice(&raw)
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid IPC bootstrap contents"))?;
+    if config.port == 0 || config.token.as_bytes().len() < 32 {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid IPC bootstrap values"));
+    }
+    Ok(config)
+}
+
+fn bridge_error(request: &Value, code: &'static str, message: &'static str) -> Value {
+    json!({ "version": PROTOCOL_VERSION, "id": request.get("id").cloned().unwrap_or(Value::Null),
+        "ok": false, "error": { "code": code, "message": message } })
+}
+
+fn forward_request(request: &Value, config: &BridgeConfig) -> Value {
+    let id = request.get("id").cloned().unwrap_or(Value::Null);
+    let addr = SocketAddr::from(([127, 0, 0, 1], config.port));
+    let mut stream = match TcpStream::connect_timeout(&addr, IPC_TIMEOUT) {
+        Ok(stream) => stream,
+        Err(_) => return bridge_error(request, "APP_NOT_RUNNING", "Internet Downloader is not running"),
+    };
+    let _ = stream.set_read_timeout(Some(IPC_TIMEOUT));
+    let _ = stream.set_write_timeout(Some(IPC_TIMEOUT));
+
+    let mut forwarded = request.clone();
+    let Some(object) = forwarded.as_object_mut() else {
+        return bridge_error(request, "INVALID_REQUEST", "Request must be a JSON object");
+    };
+    object.insert("token".to_owned(), Value::String(config.token.clone()));
+    let mut payload = match serde_json::to_vec(&forwarded) {
+        Ok(payload) => payload,
+        Err(_) => return bridge_error(request, "INVALID_REQUEST", "Request could not be encoded"),
+    };
+    if payload.len() + 1 > MAX_IPC_LINE_BYTES {
+        return bridge_error(request, "REQUEST_TOO_LARGE", "Request exceeds the IPC limit");
+    }
+    payload.push(b'\\n');
+    if stream.write_all(&payload).is_err() {
+        return bridge_error(request, "APP_BRIDGE_UNAVAILABLE", "Could not contact the desktop app");
+    }
+
+    let mut response = Vec::new();
+    let read_result = BufReader::new(stream).take((MAX_IPC_LINE_BYTES + 1) as u64).read_until(b'\\n', &mut response);
+    if read_result.is_err() || response.is_empty() || response.len() > MAX_IPC_LINE_BYTES || response.last() != Some(&b'\\n') {
+        return bridge_error(request, "APP_BRIDGE_UNAVAILABLE", "The desktop app returned no valid response");
+    }
+    response.pop();
+    match serde_json::from_slice::<Value>(&response) {
+        Ok(value) if value.get("id") == Some(&id) => value,
+        _ => bridge_error(request, "APP_BRIDGE_UNAVAILABLE", "The desktop app returned an invalid response"),
+    }
+}
 
 #[derive(Debug, PartialEq, Eq)]
 struct ProtocolError {
@@ -77,7 +157,7 @@ fn validate_request(request: &Value) -> Result<(), ProtocolError> {
     Ok(())
 }
 
-fn response_for(request: &Value) -> Value {
+fn response_for(request: &Value, config: Option<&BridgeConfig>) -> Value {
     let id = request.get("id").cloned().unwrap_or(Value::Null);
     match validate_request(request) {
         Err(error) => json!({
@@ -86,15 +166,10 @@ fn response_for(request: &Value) -> Value {
             "ok": false,
             "error": { "code": error.code, "message": error.message }
         }),
-        Ok(()) => json!({
-            "version": PROTOCOL_VERSION,
-            "id": id,
-            "ok": false,
-            "error": {
-                "code": "APP_BRIDGE_NOT_CONFIGURED",
-                "message": "Internet Downloader desktop IPC is not available yet"
-            }
-        }),
+        Ok(()) => match config {
+            Some(config) => forward_request(request, config),
+            None => bridge_error(request, "APP_NOT_RUNNING", "Internet Downloader is not running"),
+        },
     }
 }
 
@@ -137,6 +212,13 @@ fn main() {
     let stdout = io::stdout();
     let mut input = stdin.lock();
     let mut output = stdout.lock();
+    let config = match load_config() {
+        Ok(config) => Some(config),
+        Err(err) => {
+            eprintln!("idl-native-host: IPC bootstrap unavailable: {err}");
+            None
+        }
+    };
 
     loop {
         let frame = match read_frame(&mut input) {
@@ -155,7 +237,7 @@ fn main() {
                 std::process::exit(2);
             }
         };
-        let payload = serde_json::to_vec(&response_for(&request))
+        let payload = serde_json::to_vec(&response_for(&request, config.as_ref()))
             .expect("serializing JSON response cannot fail");
         if let Err(err) = write_frame(&mut output, &payload) {
             eprintln!("idl-native-host: failed to write browser response: {err}");
@@ -271,15 +353,15 @@ mod tests {
     }
 
     #[test]
-    fn valid_request_fails_closed_until_ipc_exists() {
-        let response = response_for(&request("health"));
+    fn valid_request_without_bootstrap_reports_app_not_running() {
+        let response = response_for(&request("health"), None);
         assert_eq!(response["ok"], json!(false));
-        assert_eq!(response["error"]["code"], json!("APP_BRIDGE_NOT_CONFIGURED"));
+        assert_eq!(response["error"]["code"], json!("APP_NOT_RUNNING"));
     }
 
     #[test]
     fn invalid_request_returns_structured_error() {
-        let response = response_for(&request("unknown"));
+        let response = response_for(&request("unknown"), None);
         assert_eq!(response["ok"], json!(false));
         assert_eq!(response["error"]["code"], json!("UNKNOWN_COMMAND"));
         assert_eq!(response["id"], json!("test-1"));
