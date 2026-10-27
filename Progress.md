@@ -84,6 +84,8 @@ Append-only. Format: `YYYY-MM-DD [Mx] what was done — commit sha`.
 
 - 2026-10-27 [M5] `hls.rs`: playlist parser (master -> best variant first, media, AES-128 key/IV incl. implicit IV from sequence, `EXT-X-MAP` fMP4 init, `EXT-X-BYTERANGE`), parallel segment downloader storing `<dest>.hls/NNNNNN.seg` (resume = skip finished segments; playlist change => restart), concat to `.ts`/`.mp4`/`.aac`, optional ffmpeg stream-copy remux ts->mp4 (`Settings.hls_remux`). Rejects live streams and SAMPLE-AES/DRM with clear errors. Manager: `Kind::{Http,Hls}` on items, detection by `.m3u8` URL or mpegurl content-type, `Inspection.hls` (variants for the quality picker), final extension published through `Shared.final_dest`. 6 unit + 6 integration tests (`tests/hls.rs`) pass. Full suite: `cargo test -p idl-core`.
 
+- 2026-10-27 [M7 desktop shell scaffold] Added the initial Tauri v2 app crate under `src-tauri`, a static HTML/CSS/JS download-list UI, URL validation and Tauri commands for listing, adding, pausing, resuming, and removing downloads, and startup wiring that creates the core Manager and starts `IpcServer::bind_with_bootstrap`. Added Linux WebKitGTK/GTK system dependencies to CI and included the Tauri app in the workspace. M7 is still in progress: cross-platform CI is pending; native-host manifest registration, single-instance handling, tray, notifications, and packaging verification remain. M6 remains unchecked because browser native-messaging end-to-end verification is still outstanding.
+
 ## Known issues / TODO
 
 - HLS: separate audio renditions (`EXT-X-MEDIA`) and DASH (`.mpd`) are not handled (document as limitation).
