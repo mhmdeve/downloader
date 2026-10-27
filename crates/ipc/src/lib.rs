@@ -7,7 +7,7 @@
 use idl_core::{manager::{AddRequest, Manager, StartMode}, types::RequestInfo};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::{io, net::SocketAddr, sync::Arc};
+use std::{fs::{self, OpenOptions}, io::{self, Write}, net::SocketAddr, path::PathBuf, sync::Arc};
 use subtle::ConstantTimeEq;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -158,6 +158,58 @@ async fn serve_client(mut stream: TcpStream, manager: Arc<Manager>, token: Arc<S
 pub struct IpcServer {
     addr: SocketAddr,
     task: JoinHandle<()>,
+    bootstrap_path: Option<PathBuf>,
+}
+
+fn bootstrap_file_path() -> io::Result<PathBuf> {
+    let base = dirs::config_dir().ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "user config directory unavailable"))?;
+    Ok(base.join("internet-downloader").join("ipc.json"))
+}
+
+fn hex_token(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn write_bootstrap(port: u16, token: &str) -> io::Result<PathBuf> {
+    let path = bootstrap_file_path()?;
+    let parent = path.parent().ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "invalid bootstrap path"))?;
+    fs::create_dir_all(parent)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(parent, fs::Permissions::from_mode(0o700))?;
+    }
+
+    let temporary = parent.join(format!(".ipc.json.tmp-{}", std::process::id()));
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(&temporary)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        file.set_permissions(fs::Permissions::from_mode(0o600))?;
+    }
+    let result: io::Result<PathBuf> = (|| {
+        serde_json::to_writer(&mut file, &json!({"port": port, "token": token}))
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+        file.write_all(&[10])?;
+        file.sync_all()?;
+        #[cfg(windows)]
+        if path.exists() {
+            fs::remove_file(&path)?;
+        }
+        fs::rename(&temporary, &path)?;
+        Ok(path.clone())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
 }
 
 impl IpcServer {
@@ -190,14 +242,26 @@ impl IpcServer {
                 });
             }
         });
-        Ok(Self { addr, task })
+        Ok(Self { addr, task, bootstrap_path: None })
+    }
+
+    /// Start the service and publish its ephemeral port plus a fresh 256-bit token
+    /// to the native host through the private per-user bootstrap file.
+    pub async fn bind_with_bootstrap(manager: Arc<Manager>) -> io::Result<Self> {
+        let mut random = [0u8; 32];
+        getrandom::fill(&mut random)
+            .map_err(|error| io::Error::new(io::ErrorKind::Other, format!("secure random generation failed: {error}")))?;
+        let token = hex_token(&random);
+        let mut server = Self::bind(manager, token.clone()).await?;
+        server.bootstrap_path = Some(write_bootstrap(server.local_addr().port(), &token)?);
+        Ok(server)
     }
 
     pub fn local_addr(&self) -> SocketAddr { self.addr }
 }
 
 impl Drop for IpcServer {
-    fn drop(&mut self) { self.task.abort(); }
+    fn drop(&mut self) { self.task.abort(); if let Some(path) = &self.bootstrap_path { let _ = fs::remove_file(path); } }
 }
 
 #[cfg(test)]
@@ -209,6 +273,12 @@ mod tests {
         assert!(token_matches(b"some-long-random-token-value-1234", b"some-long-random-token-value-1234"));
         assert!(!token_matches(b"some-long-random-token-value-1234", b"some-long-random-token-value-1235"));
         assert!(!token_matches(b"expected", b"short"));
+    }
+
+    #[test]
+    fn token_hex_encoding_preserves_256_bits() {
+        assert_eq!(hex_token(&[0x00, 0x7f, 0xff]), "007fff");
+        assert_eq!(hex_token(&[0u8; 32]).len(), 64);
     }
 
     #[test]
