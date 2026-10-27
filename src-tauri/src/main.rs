@@ -60,6 +60,12 @@ fn resume_all_downloads(state: State<'_, AppState>) {
 
 fn main() {
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             let (manager, ipc_server) = tauri::async_runtime::block_on(async move {
