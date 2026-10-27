@@ -1,0 +1,16 @@
+[package]
+name = "internet-downloader"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2" }
+
+[dependencies]
+idl-core = { path = "../crates/core" }
+idl-ipc = { path = "../crates/ipc" }
+serde = { version = "1.0.229", features = ["derive"] }
+tauri = { version = "2" }
+tokio = { version = "1.54.1", features = ["rt-multi-thread"] }
