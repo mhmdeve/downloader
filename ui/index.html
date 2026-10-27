@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Internet Downloader</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div class="brand-mark" aria-hidden="true">ID</div>
+      <div class="brand-copy">
+        <h1>Internet Downloader</h1>
+        <p>Fast downloads. Under your control.</p>
+      </div>
+      <button id="refresh-button" class="button button-quiet" type="button">Refresh</button>
+    </header>
+
+    <section class="add-panel" aria-labelledby="add-title">
+      <div>
+        <h2 id="add-title">Add a download</h2>
+        <p>Paste a direct HTTP or HTTPS link to get started.</p>
+      </div>
+      <form id="add-form">
+        <label class="sr-only" for="download-url">Download URL</label>
+        <input id="download-url" name="url" type="url" placeholder="https://example.com/file.zip" required autocomplete="url">
+        <button class="button button-primary" type="submit">Add download</button>
+      </form>
+      <p id="notice" class="notice" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="downloads-panel" aria-labelledby="downloads-title">
+      <div class="section-heading">
+        <div>
+          <h2 id="downloads-title">Downloads</h2>
+          <p id="download-count">Loading your list…</p>
+        </div>
+        <div class="toolbar">
+          <button id="pause-all-button" class="button button-quiet" type="button">Pause all</button>
+          <button id="resume-all-button" class="button button-quiet" type="button">Resume all</button>
+        </div>
+      </div>
+      <div id="download-list" class="download-list">
+        <div class="empty-state">Loading downloads…</div>
+      </div>
+    </section>
+    <footer>Internet Downloader · Early development build</footer>
+  </main>
+</body>
+</html>
