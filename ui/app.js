@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+const { invoke } = window.__TAURI__.core;
 
 const $ = (selector) => document.querySelector(selector);
 const list = $("#download-list");
