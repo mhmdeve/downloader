@@ -62,7 +62,7 @@ Progress.md             this file
 - [x] **M3** Core: segmented downloader (dynamic split, retry, resume sidecar) + tests against a local range server
 - [x] **M4** Core: manager (queue, max-concurrent, speed limiter, scheduler, history, events)
 - [x] **M5** Core: HLS (.m3u8) downloader
-- [ ] **M6** IPC server (loopback + token) + `native-host` binary (frame codec committed; authenticated app bridge remains unimplemented)
+- [ ] **M6** IPC server (loopback + token) + `native-host` binary (frame codec committed; authenticated app bridge remains unimplemented) (frame codec committed; authenticated app bridge remains unimplemented)
 - [ ] **M7** Tauri app shell: commands, tray, single-instance, native-host registration, notifications
 - [ ] **M8** UI: main window, add-URL dialog, download-info dialog, progress, settings, dark/light
 - [ ] **M9** Browser extension: interception, video detection, context menu, popup, overlay button
@@ -90,9 +90,11 @@ Append-only. Format: `YYYY-MM-DD [Mx] what was done — commit sha`.
 - Disk-space pre-check not implemented (ENOSPC surfaces as an I/O error). Candidate for M4/M7.
 - Engine writes the whole `Request` (cookies!) into the `.idl` sidecar; consider stripping cookies at rest in M4.
 
+- 2026-10-27 [M6 checkpoint] Added crates/native-host with a bounded 4-byte little-endian native-messaging JSON frame reader/writer, protocol-only stdout, stderr diagnostics, and 9 unit tests. Added the crate to the Cargo workspace. The host returns APP_BRIDGE_NOT_CONFIGURED by design until authenticated loopback IPC is implemented; M6 remains unchecked. Tests have not been run here because this GitHub-connected environment cannot execute Cargo. Next: implement per-run token bootstrap and authenticated loopback IPC with narrow health/inspect/enqueue/status commands, then run cargo test --workspace and add end-to-end protocol tests.
+
 ## M6 implementation contract (resume checkpoint)
 
-M6 is **not complete** until the host and app-side service are implemented and protocol-tested.
+M6 is not complete until the host and app-side service are implemented and protocol-tested.
 Do not tick the milestone merely because these acceptance criteria are documented.
 
 ### IPC security and protocol requirements
@@ -111,16 +113,13 @@ Do not tick the milestone merely because these acceptance criteria are documente
 
 1. Re-read Cargo.toml, the core manager public API, and Progress.md; confirm main HEAD before writing.
 2. Add crates/native-host as a small std-only Rust binary. Start with correct frame parsing/writing and tests; keep dependencies minimal.
-3. Add the loopback server/token implementation to a separate crate/module used by the app, with narrow command routing to idl-core::Manager.
+3. Add the loopback server/token implementation to a separate crate/module used by the app, with narrow command routing to idl_core::Manager.
 4. Add an explicit local configuration/bootstrap contract between the desktop app and native host. Do not store reusable IPC tokens in committed files.
 5. Re-add both crates to the workspace; update the lockfile using Cargo and run cargo test --workspace locally.
 6. Mark M6 complete only after protocol tests pass and record the test command/result and commit SHA. If the environment cannot run Cargo, report the limitation and leave M6 unchecked.
 
 ### Current resume point
 
-- Verified main at 369bca3643fd8f6021a4e1107fcbc6a0f1640f11 ([M5] Core: HLS downloads with AES-128, fMP4, resume; manager integration + tests).
-- Actual tree contains only crates/core; crates/native-host and src-tauri do not exist yet. The workspace includes only crates/core.
-- Next action: implement the native-messaging host frame parser and focused tests under crates/native-host, then create the app-side IPC crate/server. Do not mark an integration complete until it compiles and the end-to-end protocol is exercised.
-
-
-- 2026-10-27 [M6 checkpoint] Added `crates/native-host` with a bounded 4-byte little-endian native-messaging JSON frame reader/writer, protocol-only stdout, stderr diagnostics, and 9 unit tests. Added the crate to the Cargo workspace. The host returns `APP_BRIDGE_NOT_CONFIGURED` by design until authenticated loopback IPC is implemented; M6 remains unchecked. Tests have not been run here because this GitHub-connected environment cannot execute Cargo. Next: implement per-run token bootstrap and authenticated loopback IPC with narrow health/inspect/enqueue/status commands, then run `cargo test --workspace` and add end-to-end protocol tests.
+- Verified main at 42c1d518287fb98b8ff4c60a74e01b74a9ec7cde.
+- Actual tree contains crates/core and crates/native-host; src-tauri and the browser extension do not exist yet. The workspace includes the core and native-host crates.
+- Next action: implement the authenticated local IPC server and a private bootstrap mechanism from the app to the host. The host frame codec is present but intentionally returns APP_BRIDGE_NOT_CONFIGURED. After wiring commands, run cargo test --workspace and end-to-end tests; do not mark the integration complete before verifying it.
