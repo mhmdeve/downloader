@@ -287,4 +287,41 @@ mod tests {
         assert!(validate_http_url("file:///etc/passwd").is_err());
         assert!(validate_http_url("https://user:pass@example.com/a").is_err());
     }
+    #[tokio::test]
+    async fn loopback_service_authenticates_requests_end_to_end() {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+        use tokio::net::TcpStream;
+
+        let data_dir = std::env::temp_dir().join(format!("idl-ipc-test-{}", std::process::id()));
+        let manager = Manager::new(&data_dir, tokio::runtime::Handle::current()).unwrap();
+        let token = "test-token-with-at-least-32-bytes-long".to_owned();
+        let server = IpcServer::bind(manager.clone(), token.clone()).await.unwrap();
+
+        for (sent_token, expected_ok, expected_code) in [
+            (token.as_str(), true, ""),
+            ("wrong-token-with-at-least-32-bytes", false, "UNAUTHORIZED"),
+        ] {
+            let mut stream = TcpStream::connect(server.local_addr()).await.unwrap();
+            let request = json!({
+                "version": 1, "id": "integration-1", "token": sent_token, "command": "health"
+            });
+            let mut bytes = serde_json::to_vec(&request).unwrap();
+            bytes.push(10);
+            stream.write_all(&bytes).await.unwrap();
+            let mut response = Vec::new();
+            BufReader::new(stream).read_until(10, &mut response).await.unwrap();
+            let response: Value = serde_json::from_slice(&response).unwrap();
+            assert_eq!(response["ok"], json!(expected_ok));
+            if expected_ok {
+                assert_eq!(response["data"]["ready"], json!(true));
+            } else {
+                assert_eq!(response["error"]["code"], json!(expected_code));
+            }
+        }
+
+        drop(server);
+        drop(manager);
+        let _ = fs::remove_dir_all(data_dir);
+    }
+
 }
