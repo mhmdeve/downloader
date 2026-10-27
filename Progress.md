@@ -59,7 +59,7 @@ Progress.md             this file
 - [x] **M0** Repo attached, toolchain checked, Linux build deps installed
 - [x] **M1** Skeleton: workspace, Progress.md, README, LICENSE, .gitignore
 - [x] **M2** Core: types, categories, filename/URL helpers, probe (HEAD/Range, Content-Disposition)
-- [ ] **M3** Core: segmented downloader (dynamic split, retry, resume sidecar) + tests against a local range server
+- [x] **M3** Core: segmented downloader (dynamic split, retry, resume sidecar) + tests against a local range server
 - [ ] **M4** Core: manager (queue, max-concurrent, speed limiter, scheduler, history, events)
 - [ ] **M5** Core: HLS (.m3u8) downloader
 - [ ] **M6** IPC server (loopback + token) + `native-host` binary
@@ -78,6 +78,9 @@ Append-only. Format: `YYYY-MM-DD [Mx] what was done — commit sha`.
 - 2026-10-27 [M1] Workspace Cargo.toml (size-first release profile), LICENSE (MIT), README, .gitignore, this file.
 - 2026-10-27 [M2] `crates/core`: error, types (RequestInfo/Status/Segment), categories, filename (Content-Disposition RFC 6266, sanitising, unique paths, `.idl` sidecar path), net (client + request decoration, identity encoding), probe (GET Range 0-0 -> size/ranges/name/validators). 7 unit tests pass. NOTE: workspace `members` currently only lists `crates/core`; re-add `crates/native-host` and `src-tauri` as they are created (M6/M7).
 
+- 2026-10-27 [M3] `crates/core/src/engine.rs` + `limiter.rs`: segmented downloader. Pre-allocated `<file>.part`, per-connection buffered positional writes (pos = flushed bytes only), dynamic splitting of the busiest segment, retry w/ backoff (8x, resets on progress), `If-Range` + Content-Range validation, fallback to original URL if redirect target expires, sidecar `<file>.idl` saved every 1 s, resume validates size/ETag/Last-Modified else restarts, pause/cancel via `watch<Signal>`, unknown-length + no-range servers handled, global token-bucket limiter. Tests: `crates/core/tests/engine.rs` (11 integration tests against a scriptable local server in `tests/common/mod.rs`) all pass.
+
 ## Known issues / TODO
 
-(none yet)
+- Disk-space pre-check not implemented (ENOSPC surfaces as an I/O error). Candidate for M4/M7.
+- Engine writes the whole `Request` (cookies!) into the `.idl` sidecar; consider stripping cookies at rest in M4.

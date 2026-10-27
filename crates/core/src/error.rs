@@ -16,6 +16,10 @@ pub enum Error {
     Json(#[from] serde_json::Error),
     #[error("the remote file changed since the download started")]
     RemoteChanged,
+    #[error("connection timed out")]
+    Timeout,
+    #[error("connection closed before the whole range was received")]
+    Truncated,
     #[error("{0}")]
     Other(String),
 }
@@ -26,7 +30,7 @@ impl Error {
         match self {
             Error::Http(e) => !e.is_builder() && !e.is_redirect(),
             Error::BadStatus(c) => matches!(*c, 408 | 425 | 429 | 500 | 502 | 503 | 504),
-            Error::Io(_) => false,
+            Error::Timeout | Error::Truncated => true,
             _ => false,
         }
     }
