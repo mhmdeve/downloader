@@ -14,3 +14,5 @@ idl-ipc = { path = "../crates/ipc" }
 serde = { version = "1.0.229", features = ["derive"] }
 tauri = { version = "2" }
 tokio = { version = "1.54.1", features = ["rt-multi-thread"] }
+url = "2.5.8"
+tokio = { version = "1.54.1", features = ["rt-multi-thread"] }
