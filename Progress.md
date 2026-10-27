@@ -88,6 +88,8 @@ Append-only. Format: `YYYY-MM-DD [Mx] what was done — commit sha`.
 
 - 2026-10-27 [M7 single-instance behavior] Added the Tauri single-instance plugin; a second launch now brings the existing main window forward instead of opening a second app instance. Added `docs/DESKTOP_APP.md` with prerequisites, build commands, and the current integration boundaries. Cross-platform CI for the initial shell is still running; this plugin change also needs CI verification.
 
+- 2026-10-27 [M7 CI failure diagnosis] The first Tauri workspace CI run failed because Tauri's context macro expected the default `src-tauri/icons/icon.png` asset, which the new shell did not yet include. Set `bundle.icon` to an empty list to remove the implicit asset dependency for this development scaffold. This fix is pending a fresh cross-platform CI run; do not treat M7 as passing until verified.
+
 ## Known issues / TODO
 
 - HLS: separate audio renditions (`EXT-X-MEDIA`) and DASH (`.mpd`) are not handled (document as limitation).
