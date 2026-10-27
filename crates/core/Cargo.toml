@@ -1,0 +1,17 @@
+[package]
+name = "idl-core"
+description = "Download engine for Internet Downloader"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+dirs = "7.0.0"
+percent-encoding = "2.3.2"
+reqwest = { version = "0.13.5", default-features = false, features = ["native-tls", "http2"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "fs", "io-util", "sync", "time", "net"] }
+url = "2.5.8"
