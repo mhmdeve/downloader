@@ -4,7 +4,7 @@
 //! Standard output is reserved for framed responses; diagnostics go to standard error.
 //! The host reads a private per-user bootstrap file and forwards requests to the desktop app.
 
-use std::{fs, io::{self, BufRead, BufReader, Read, Write}, net::{SocketAddr, TcpStream}, path::PathBuf, time::Duration};
+use std::{fs, io::{self, Read, Write}, net::{SocketAddr, TcpStream}, path::PathBuf, time::Duration};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use url::Url;
@@ -80,12 +80,23 @@ fn forward_request(request: &Value, config: &BridgeConfig) -> Value {
         return bridge_error(request, "APP_BRIDGE_UNAVAILABLE", "Could not contact the desktop app");
     }
 
-    let mut response = Vec::new();
-    let read_result = BufReader::new(stream).take((MAX_IPC_LINE_BYTES + 1) as u64).read_until(b'\n', &mut response);
-    if read_result.is_err() || response.is_empty() || response.len() > MAX_IPC_LINE_BYTES || response.last() != Some(&b'\n') {
+    let mut response = Vec::with_capacity(1024);
+    loop {
+        let mut byte = [0u8; 1];
+        match stream.read(&mut byte) {
+            Ok(1) if byte[0] == b'\n' => break,
+            Ok(1) => {
+                if response.len() >= MAX_IPC_LINE_BYTES {
+                    return bridge_error(request, "APP_BRIDGE_UNAVAILABLE", "The desktop app response exceeded the IPC limit");
+                }
+                response.push(byte[0]);
+            }
+            _ => return bridge_error(request, "APP_BRIDGE_UNAVAILABLE", "The desktop app returned no valid response"),
+        }
+    }
+    if response.is_empty() {
         return bridge_error(request, "APP_BRIDGE_UNAVAILABLE", "The desktop app returned no valid response");
     }
-    response.pop();
     match serde_json::from_slice::<Value>(&response) {
         Ok(value) if value.get("id") == Some(&id) => value,
         _ => bridge_error(request, "APP_BRIDGE_UNAVAILABLE", "The desktop app returned an invalid response"),
