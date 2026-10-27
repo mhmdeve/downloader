@@ -86,6 +86,8 @@ Append-only. Format: `YYYY-MM-DD [Mx] what was done — commit sha`.
 
 - 2026-10-27 [M7 desktop shell scaffold] Added the initial Tauri v2 app crate under `src-tauri`, a static HTML/CSS/JS download-list UI, URL validation and Tauri commands for listing, adding, pausing, resuming, and removing downloads, and startup wiring that creates the core Manager and starts `IpcServer::bind_with_bootstrap`. Added Linux WebKitGTK/GTK system dependencies to CI and included the Tauri app in the workspace. M7 is still in progress: cross-platform CI is pending; native-host manifest registration, single-instance handling, tray, notifications, and packaging verification remain. M6 remains unchecked because browser native-messaging end-to-end verification is still outstanding.
 
+- 2026-10-27 [M7 single-instance behavior] Added the Tauri single-instance plugin; a second launch now brings the existing main window forward instead of opening a second app instance. Added `docs/DESKTOP_APP.md` with prerequisites, build commands, and the current integration boundaries. Cross-platform CI for the initial shell is still running; this plugin change also needs CI verification.
+
 ## Known issues / TODO
 
 - HLS: separate audio renditions (`EXT-X-MEDIA`) and DASH (`.mpd`) are not handled (document as limitation).
