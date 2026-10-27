@@ -4,7 +4,7 @@
 //! deliver it to the native host through a private per-user bootstrap mechanism.
 //! This crate never persists or logs the token. It binds only to IPv4 loopback.
 
-use idl_core::{AddRequest, Manager, RequestInfo, StartMode};
+use idl_core::{manager::{AddRequest, Manager, StartMode}, types::RequestInfo};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{io, net::SocketAddr, sync::Arc};
