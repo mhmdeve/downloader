@@ -123,3 +123,5 @@ Do not tick the milestone merely because these acceptance criteria are documente
 - Verified main at 42c1d518287fb98b8ff4c60a74e01b74a9ec7cde.
 - Actual tree contains crates/core and crates/native-host; src-tauri and the browser extension do not exist yet. The workspace includes the core and native-host crates.
 - Next action: implement the authenticated local IPC server and a private bootstrap mechanism from the app to the host. The host frame codec is present but intentionally returns APP_BRIDGE_NOT_CONFIGURED. After wiring commands, run cargo test --workspace and end-to-end tests; do not mark the integration complete before verifying it.
+
+- 2026-10-27 [M6 follow-up] Added GitHub Actions workflow .github/workflows/rust.yml to run cargo test --workspace on Ubuntu, Windows, and macOS for pushes to main and pull requests. The workflow has been committed but has not yet run; inspect its first run before treating tests as passing. Current next step: implement strict host request schema/version/URL validation and the authenticated loopback app service; do not expose arbitrary fetch or filesystem APIs.
