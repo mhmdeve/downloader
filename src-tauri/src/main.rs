@@ -6,7 +6,7 @@ use idl_core::{
 };
 use idl_ipc::IpcServer;
 use std::sync::{Arc, Mutex};
-use tauri::{RunEvent, State};
+use tauri::{Manager as TauriManager, RunEvent, State};
 
 struct AppState {
     manager: Arc<Manager>,
