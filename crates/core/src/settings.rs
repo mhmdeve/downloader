@@ -22,6 +22,8 @@ pub struct Settings {
     pub proxy: Option<String>,
     /// Resume unfinished downloads automatically when the app starts.
     pub auto_resume: bool,
+    /// Remux finished HLS (.ts) downloads to .mp4 when `ffmpeg` is on PATH.
+    pub hls_remux: bool,
     #[serde(default)]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -40,6 +42,7 @@ impl Default for Settings {
             speed_limit: 0,
             proxy: None,
             auto_resume: false,
+            hls_remux: true,
             extra: Default::default(),
         }
     }

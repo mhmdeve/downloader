@@ -9,7 +9,8 @@ use crate::limiter::Limiter;
 use crate::net::{build_client, ClientOptions};
 use crate::probe::{probe, ProbeInfo};
 use crate::settings::Settings;
-use crate::types::{DownloadId, RequestInfo, Segment, Status};
+use crate::hls::{self, HlsInfo};
+use crate::types::{DownloadId, Kind, RequestInfo, Segment, Status};
 use crate::{Error, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -46,6 +47,8 @@ pub struct Item {
     pub resumable: bool,
     #[serde(default)]
     pub content_type: Option<String>,
+    #[serde(default)]
+    pub kind: Kind,
 }
 
 /// Item + live numbers, as sent to the UI.
@@ -121,6 +124,9 @@ pub struct Inspection {
     pub dir: PathBuf,
     pub suggested_path: PathBuf,
     pub duplicate_of: Option<DownloadId>,
+    pub kind: Kind,
+    /// Present for HLS: variants (quality choices) or segment count / duration.
+    pub hls: Option<HlsInfo>,
 }
 
 struct Run {
@@ -192,10 +198,10 @@ impl Manager {
                 let Some(m) = weak.upgrade() else { break };
                 n += 1;
                 m.tick();
-                if n % 8 == 0 {
+                if n.is_multiple_of(8) {
                     m.save_if_dirty();
                 }
-                if n % 20 == 0 {
+                if n.is_multiple_of(20) {
                     m.pump();
                 }
             }
@@ -264,7 +270,18 @@ impl Manager {
     /// Probe a URL for the confirmation dialog.
     pub async fn inspect(&self, request: &RequestInfo) -> Result<Inspection> {
         let client = self.client.lock().unwrap().clone();
-        let info = probe(&client, request).await?;
+        let (info, kind, hls_info) = if hls::is_hls_url(&request.url) {
+            let h = hls::inspect(&client, request).await?;
+            (hls_probe(&request.url, &h), Kind::Hls, Some(h))
+        } else {
+            let info = probe(&client, request).await?;
+            if info.content_type.as_deref().map(hls::is_hls_mime).unwrap_or(false) {
+                let h = hls::inspect(&client, request).await?;
+                (hls_probe(&request.url, &h), Kind::Hls, Some(h))
+            } else {
+                (info, Kind::Http, None)
+            }
+        };
         let category = Category::from_filename(&info.filename);
         let (dir, path) = {
             let g = self.inner.lock().unwrap();
@@ -272,7 +289,7 @@ impl Manager {
             let path = reserve_path(&g, &dir, &info.filename);
             (dir, path)
         };
-        Ok(Inspection { duplicate_of: self.find_duplicate(&request.url), probe: info, category, dir, suggested_path: path })
+        Ok(Inspection { duplicate_of: self.find_duplicate(&request.url), probe: info, category, dir, suggested_path: path, kind, hls: hls_info })
     }
 
     pub async fn add(self: &Arc<Self>, a: AddRequest) -> Result<AddResult> {
@@ -286,16 +303,27 @@ impl Manager {
 
         let mut size = a.size;
         let mut content_type = None;
-        let filename = match &a.filename {
-            Some(n) if !n.trim().is_empty() => sanitize(n),
-            _ => {
+        let mut kind = if hls::is_hls_url(&a.request.url) { Kind::Hls } else { Kind::Http };
+        let provided = a.filename.as_deref().map(str::trim).filter(|n| !n.is_empty()).map(sanitize);
+        let mut filename = match provided {
+            Some(n) => n,
+            None if kind == Kind::Hls => hls_name_from_url(&a.request.url),
+            None => {
                 let client = self.client.lock().unwrap().clone();
                 let info = probe(&client, &a.request).await?;
                 size = info.size;
                 content_type = info.content_type.clone();
-                info.filename
+                if info.content_type.as_deref().map(hls::is_hls_mime).unwrap_or(false) {
+                    kind = Kind::Hls;
+                    hls_name_from_url(&a.request.url)
+                } else {
+                    info.filename
+                }
             }
         };
+        if kind == Kind::Hls {
+            filename = hls_ts_name(&filename);
+        }
         let category = a.category.unwrap_or_else(|| Category::from_filename(&filename));
 
         let view = {
@@ -323,6 +351,7 @@ impl Manager {
                 scheduled_at: a.scheduled_at,
                 resumable: false,
                 content_type,
+                kind,
             };
             g.items.insert(id, item.clone());
             view(&g, &item)
@@ -434,6 +463,7 @@ impl Manager {
         let Some(it) = item else { return };
         let _ = std::fs::remove_file(engine::part_path(&it.dest));
         let _ = std::fs::remove_file(sidecar_path(&it.dest));
+        let _ = std::fs::remove_dir_all(hls::work_dir(&it.dest));
         if delete_file {
             let _ = std::fs::remove_file(&it.dest);
         }
@@ -474,6 +504,7 @@ impl Manager {
         let mut starts = Vec::new();
         {
             let mut g = self.inner.lock().unwrap();
+            let remux = g.settings.hls_remux;
             let slots = (g.settings.max_concurrent as usize).saturating_sub(g.runs.len());
             if slots == 0 {
                 return;
@@ -482,7 +513,7 @@ impl Manager {
             let ids: Vec<DownloadId> = g
                 .items
                 .values()
-                .filter(|i| i.status == Status::Queued && !g.runs.contains_key(&i.id) && i.scheduled_at.map_or(true, |t| t <= now))
+                .filter(|i| i.status == Status::Queued && !g.runs.contains_key(&i.id) && i.scheduled_at.is_none_or(|t| t <= now))
                 .map(|i| i.id)
                 .take(slots)
                 .collect();
@@ -491,14 +522,15 @@ impl Manager {
                 let it = g.items.get_mut(&id).unwrap();
                 it.status = Status::Downloading;
                 it.error = None;
+                let kind = it.kind;
                 let job = Job { request: it.request.clone(), dest: it.dest.clone(), max_connections: max_conn };
                 let (tx, rx) = watch::channel(Signal::Run);
                 let shared = Arc::new(Shared::default());
                 g.runs.insert(id, Run { ctl: tx, shared: shared.clone() });
-                starts.push((id, job, shared, rx));
+                starts.push((id, job, shared, rx, kind, remux));
             }
         }
-        for (id, job, shared, rx) in starts {
+        for (id, job, shared, rx, kind, remux) in starts {
             if let Some(v) = self.get(id) {
                 let _ = self.tx.send(Event::Updated(v));
             }
@@ -506,7 +538,10 @@ impl Manager {
             let client = self.client.lock().unwrap().clone();
             let limiter = self.limiter.clone();
             self.handle.spawn(async move {
-                let res = engine::run(client, job, shared, rx, limiter).await;
+                let res = match kind {
+                    Kind::Http => engine::run(client, job, shared, rx, limiter).await,
+                    Kind::Hls => hls::run(client, job, shared, rx, limiter, remux).await,
+                };
                 me.finished(id, res);
             });
         }
@@ -529,6 +564,13 @@ impl Manager {
                     it.resumable = sh.resumable.load(Ordering::Relaxed);
                     if let Some(info) = sh.info.lock().unwrap().as_ref() {
                         it.content_type = info.content_type.clone();
+                    }
+                    // HLS decides the final extension (.ts / .mp4 / .aac) only after parsing.
+                    if let Some(fd) = sh.final_dest.lock().unwrap().clone() {
+                        if fd != it.dest {
+                            it.filename = fd.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+                            it.dest = fd;
+                        }
                     }
                 }
                 match res {
@@ -621,6 +663,45 @@ impl Manager {
             self.dirty.store(true, Ordering::Relaxed);
         }
     }
+}
+
+fn hls_probe(url: &str, h: &HlsInfo) -> ProbeInfo {
+    let _ = h;
+    ProbeInfo {
+        final_url: url.to_string(),
+        size: None,
+        accepts_ranges: false,
+        filename: hls_name_from_url(url),
+        content_type: Some("application/vnd.apple.mpegurl".into()),
+        etag: None,
+        last_modified: None,
+    }
+}
+
+/// `https://x/vod/movie/index.m3u8` -> `movie.ts` (generic playlist names fall back to the parent folder).
+pub fn hls_name_from_url(url: &str) -> String {
+    const GENERIC: [&str; 9] = ["index", "master", "playlist", "chunklist", "stream", "manifest", "main", "video", "prog_index"];
+    let Ok(u) = url::Url::parse(url) else { return "video.ts".into() };
+    let segs: Vec<String> = u
+        .path_segments()
+        .map(|s| s.filter(|x| !x.is_empty()).map(|x| percent_encoding::percent_decode_str(x).decode_utf8_lossy().into_owned()).collect())
+        .unwrap_or_default();
+    let stem_of = |s: &str| s.rsplit_once('.').map(|(a, _)| a.to_string()).unwrap_or_else(|| s.to_string());
+    let mut name = segs.last().map(|s| stem_of(s)).unwrap_or_default();
+    if name.is_empty() || GENERIC.contains(&name.to_ascii_lowercase().as_str()) {
+        name = segs.iter().rev().skip(1).find(|s| !s.is_empty()).cloned().or_else(|| u.host_str().map(String::from)).unwrap_or_else(|| "video".into());
+    }
+    format!("{}.ts", sanitize(&name))
+}
+
+/// Normalise a user/page supplied name for an HLS item to `<stem>.ts` (the real extension is set at the end).
+fn hls_ts_name(name: &str) -> String {
+    let lower = name.to_ascii_lowercase();
+    let stem = match lower.rsplit_once('.') {
+        Some((_, ext)) if matches!(ext, "m3u8" | "ts" | "mp4" | "m4v" | "mkv" | "aac" | "mp3" | "mov" | "webm") => &name[..name.len() - ext.len() - 1],
+        _ => name,
+    };
+    format!("{}.ts", if stem.is_empty() { "video" } else { stem })
 }
 
 fn describe(e: &Error) -> String {

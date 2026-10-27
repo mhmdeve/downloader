@@ -186,3 +186,55 @@ async fn respond(s: &mut TcpStream, cfg: &Arc<Cfg>, h: &HashMap<String, String>)
     s.shutdown().await.ok();
     Ok(())
 }
+
+// ───────────── static-route server (used by the HLS tests) ─────────────
+
+pub type Routes = Arc<Mutex<HashMap<String, Vec<u8>>>>;
+
+/// Serve fixed bodies by path. Unknown path => 404. Optional per-response delay.
+pub async fn serve_routes(routes: Routes, delay: Option<Duration>) -> SocketAddr {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut s, _)) = listener.accept().await else { break };
+            let routes = routes.clone();
+            tokio::spawn(async move {
+                let mut head = Vec::new();
+                let mut tmp = [0u8; 1024];
+                while !head.windows(4).any(|w| w == b"\r\n\r\n") {
+                    match s.read(&mut tmp).await {
+                        Ok(0) | Err(_) => return,
+                        Ok(n) => head.extend_from_slice(&tmp[..n]),
+                    }
+                }
+                let text = String::from_utf8_lossy(&head).to_string();
+                let path = text.split_whitespace().nth(1).unwrap_or("/").split('?').next().unwrap_or("/").to_string();
+                let body = routes.lock().unwrap().get(&path).cloned();
+                if let Some(d) = delay {
+                    tokio::time::sleep(d).await;
+                }
+                let ctype = if path.ends_with(".m3u8") { "application/vnd.apple.mpegurl" } else { "application/octet-stream" };
+                let _ = match body {
+                    Some(b) => {
+                        let h = format!("HTTP/1.1 200 OK\r\nContent-Type: {ctype}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", b.len());
+                        let _ = s.write_all(h.as_bytes()).await;
+                        s.write_all(&b).await
+                    }
+                    None => s.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await,
+                };
+                let _ = s.shutdown().await;
+            });
+        }
+    });
+    addr
+}
+
+pub fn new_routes() -> Routes {
+    Arc::new(Mutex::new(HashMap::new()))
+}
+
+/// Deterministic segment payload.
+pub fn seg_bytes(seg: u64, len: usize) -> Vec<u8> {
+    (0..len as u64).map(|i| byte(i + seg * 1_000_003)).collect()
+}

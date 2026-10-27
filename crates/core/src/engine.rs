@@ -94,6 +94,10 @@ pub struct Shared {
     pub active_conns: AtomicU32,
     pub resumable: AtomicBool,
     pub info: Mutex<Option<ProbeInfo>>,
+    /// HLS: bytes of completed segments (HTTP downloads use segment cells instead).
+    pub hls_done: AtomicU64,
+    /// HLS: the final file path (its extension is only known once the playlist is parsed).
+    pub final_dest: Mutex<Option<PathBuf>>,
     cells: Mutex<Vec<Arc<SegCell>>>,
 }
 
@@ -103,10 +107,11 @@ impl Shared {
     }
     /// Bytes safely on disk.
     pub fn downloaded(&self) -> u64 {
-        self.cells.lock().unwrap().iter().map(|c| {
+        let http: u64 = self.cells.lock().unwrap().iter().map(|c| {
             let s = c.snapshot();
             s.pos - s.start
-        }).sum()
+        }).sum();
+        http + self.hls_done.load(Ordering::Relaxed)
     }
 }
 
@@ -202,7 +207,7 @@ fn load_sidecar(path: &Path) -> Option<Sidecar> {
     (sc.version == 1).then_some(sc)
 }
 
-async fn wait_not_run(ctl: &mut watch::Receiver<Signal>) {
+pub(crate) async fn wait_not_run(ctl: &mut watch::Receiver<Signal>) {
     loop {
         if *ctl.borrow() != Signal::Run {
             return;
@@ -214,7 +219,7 @@ async fn wait_not_run(ctl: &mut watch::Receiver<Signal>) {
 }
 
 /// Sleep for `d`, returning `false` early if pause/cancel was requested.
-async fn interruptible_sleep(ctl: &mut watch::Receiver<Signal>, d: Duration) -> bool {
+pub(crate) async fn interruptible_sleep(ctl: &mut watch::Receiver<Signal>, d: Duration) -> bool {
     tokio::select! {
         _ = tokio::time::sleep(d) => true,
         _ = wait_not_run(ctl) => false,

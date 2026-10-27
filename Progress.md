@@ -61,7 +61,7 @@ Progress.md             this file
 - [x] **M2** Core: types, categories, filename/URL helpers, probe (HEAD/Range, Content-Disposition)
 - [x] **M3** Core: segmented downloader (dynamic split, retry, resume sidecar) + tests against a local range server
 - [x] **M4** Core: manager (queue, max-concurrent, speed limiter, scheduler, history, events)
-- [ ] **M5** Core: HLS (.m3u8) downloader
+- [x] **M5** Core: HLS (.m3u8) downloader
 - [ ] **M6** IPC server (loopback + token) + `native-host` binary
 - [ ] **M7** Tauri app shell: commands, tray, single-instance, native-host registration, notifications
 - [ ] **M8** UI: main window, add-URL dialog, download-info dialog, progress, settings, dark/light
@@ -82,7 +82,10 @@ Append-only. Format: `YYYY-MM-DD [Mx] what was done — commit sha`.
 
 - 2026-10-27 [M4] `settings.rs` (+ per-category dirs, `extra` map for UI prefs) and `manager.rs`: `Manager::new(data_dir, tokio Handle)`; `inspect()` for the file-info dialog, `add()` (probe if no name, category folders, unique dest incl. queued items, duplicate-URL resume), `pause/resume/*_all/remove(delete_file)/clear_completed/set_schedule/update_request/update_settings`, queue with `max_concurrent`, scheduler (`scheduled_at`, pumped every 5 s), global speed limit, 4 Hz `Event::Progress` stream (speed EMA, ETA, connections), history in `history.json` (0600 on unix), in-flight items restored as Paused (or Queued if `auto_resume`). 11 integration tests in `tests/manager.rs` pass.
 
+- 2026-10-27 [M5] `hls.rs`: playlist parser (master -> best variant first, media, AES-128 key/IV incl. implicit IV from sequence, `EXT-X-MAP` fMP4 init, `EXT-X-BYTERANGE`), parallel segment downloader storing `<dest>.hls/NNNNNN.seg` (resume = skip finished segments; playlist change => restart), concat to `.ts`/`.mp4`/`.aac`, optional ffmpeg stream-copy remux ts->mp4 (`Settings.hls_remux`). Rejects live streams and SAMPLE-AES/DRM with clear errors. Manager: `Kind::{Http,Hls}` on items, detection by `.m3u8` URL or mpegurl content-type, `Inspection.hls` (variants for the quality picker), final extension published through `Shared.final_dest`. 6 unit + 6 integration tests (`tests/hls.rs`) pass. Full suite: `cargo test -p idl-core`.
+
 ## Known issues / TODO
 
+- HLS: separate audio renditions (`EXT-X-MEDIA`) and DASH (`.mpd`) are not handled (document as limitation).
 - Disk-space pre-check not implemented (ENOSPC surfaces as an I/O error). Candidate for M4/M7.
 - Engine writes the whole `Request` (cookies!) into the `.idl` sidecar; consider stripping cookies at rest in M4.

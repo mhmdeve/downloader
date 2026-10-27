@@ -13,6 +13,7 @@ pub mod limiter;
 pub mod manager;
 pub mod error;
 pub mod filename;
+pub mod hls;
 pub mod net;
 pub mod probe;
 pub mod settings;

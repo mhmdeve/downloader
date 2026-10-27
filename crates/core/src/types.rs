@@ -57,3 +57,13 @@ impl Segment {
         self.pos >= self.end
     }
 }
+
+/// How a download is fetched.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Kind {
+    #[default]
+    Http,
+    /// HLS playlist (`.m3u8`): segments are fetched and joined.
+    Hls,
+}

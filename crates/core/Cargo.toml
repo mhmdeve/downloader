@@ -7,6 +7,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+aes = "0.9.3"
+cbc = { version = "0.2.1", features = ["alloc"] }
 dirs = "7.0.0"
 percent-encoding = "2.3.2"
 reqwest = { version = "0.13.5", default-features = false, features = ["native-tls", "http2"] }
