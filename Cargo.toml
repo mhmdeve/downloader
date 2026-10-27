@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = ["crates/core"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/mhmdeve/downloader"
+authors = ["Internet Downloader contributors"]
+
+# Size-first release profile (see Progress.md "Architecture decisions").
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
