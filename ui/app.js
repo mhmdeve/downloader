@@ -115,13 +115,29 @@ function makeAction(label, action, quiet = false) {
   return button;
 }
 
+let refreshInFlight = false;
+let refreshQueued = false;
+
 async function refresh() {
+  // Avoid overlapping list requests when a previous refresh is still in flight.
+  if (refreshInFlight) {
+    refreshQueued = true;
+    return;
+  }
+
+  refreshInFlight = true;
   try {
     const items = await invoke("list_downloads");
     renderDownloads(items);
   } catch (error) {
     list.innerHTML = '<div class="empty-state">The desktop service could not be reached.</div>';
     showNotice(String(error), "error");
+  } finally {
+    refreshInFlight = false;
+    if (refreshQueued) {
+      refreshQueued = false;
+      void refresh();
+    }
   }
 }
 
