@@ -72,8 +72,19 @@ function renderDownloads(items) {
     size.textContent = total == null ? formatBytes(downloaded) : `${formatBytes(downloaded)} / ${formatBytes(total)}`;
     const speed = document.createElement("span");
     speed.textContent = status === "downloading" ? `${formatBytes(view.speed ?? 0)}/s` : "";
-    meta.append(state, size, speed);
+    const eta = document.createElement("span");
+    eta.textContent = status === "downloading" && Number.isFinite(Number(view.eta))
+      ? `${Math.max(0, Number(view.eta))}s left`
+      : "";
+    meta.append(state, size, speed, eta);
     main.append(title, source, track, meta);
+
+    if (status === "error" && item.error) {
+      const error = document.createElement("p");
+      error.className = "download-error";
+      error.textContent = escapeText(item.error);
+      main.append(error);
+    }
 
     const actions = document.createElement("div");
     actions.className = "row-actions";
