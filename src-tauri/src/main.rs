@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use idl_core::{
+    categories::Category,
     manager::{AddRequest, AddResult, ItemView, Manager, StartMode},
     settings::Settings,
     types::RequestInfo,
@@ -31,15 +32,39 @@ async fn inspect_download(state: State<'_, AppState>, url: String) -> Result<idl
 }
 
 #[tauri::command]
-async fn add_download(state: State<'_, AppState>, url: String) -> Result<AddResult, String> {
+async fn add_download(
+    state: State<'_, AppState>,
+    url: String,
+    filename: Option<String>,
+    directory: Option<String>,
+    category: Option<String>,
+) -> Result<AddResult, String> {
     let parsed = url::Url::parse(&url).map_err(|_| "Enter a valid HTTP(S) URL.".to_string())?;
     if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none()
         || !parsed.username().is_empty() || parsed.password().is_some()
     {
         return Err("Only HTTP(S) URLs without embedded credentials are supported.".into());
     }
+    let category = match category.as_deref() {
+        None | Some("other") => Some(Category::Other),
+        Some("compressed") => Some(Category::Compressed),
+        Some("documents") => Some(Category::Documents),
+        Some("music") => Some(Category::Music),
+        Some("programs") => Some(Category::Programs),
+        Some("video") => Some(Category::Video),
+        Some("images") => Some(Category::Images),
+        Some(_) => return Err("Unknown download category.".into()),
+    };
+    let filename = filename.map(|name| name.trim().to_string()).filter(|name| !name.is_empty());
+    if filename.as_ref().is_some_and(|name| name.len() > 255 || name.contains('/') || name.contains('\\') || name.contains('\0')) {
+        return Err("File name is invalid or too long.".into());
+    }
+    let dir = directory.map(|path| path.trim().to_string()).filter(|path| !path.is_empty()).map(std::path::PathBuf::from);
     state.manager.add(AddRequest {
         request: RequestInfo::new(url),
+        filename,
+        dir,
+        category,
         start: StartMode::Now,
         ..Default::default()
     }).await.map_err(|error| error.to_string())
