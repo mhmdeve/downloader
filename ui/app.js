@@ -6,6 +6,10 @@ const count = $("#download-count");
 const notice = $("#notice");
 const form = $("#add-form");
 const urlInput = $("#download-url");
+const settingsToggle = $("#settings-toggle");
+const settingsPanel = $("#settings-panel");
+const settingsForm = $("#settings-form");
+const settingsNotice = $("#settings-notice");
 
 function showNotice(message, type = "") {
   notice.textContent = message;
@@ -155,6 +159,75 @@ form.addEventListener("submit", async (event) => {
     await refresh();
   } catch (error) {
     showNotice(String(error), "error");
+  } finally {
+    submit.disabled = false;
+  }
+});
+
+function showSettingsNotice(message, type = "") {
+  settingsNotice.textContent = message;
+  settingsNotice.className = `notice ${type}`.trim();
+}
+
+async function openSettings() {
+  settingsToggle.disabled = true;
+  showSettingsNotice("Loading settings…");
+  try {
+    const settings = await invoke("get_settings");
+    $("#download-dir").value = String(settings.download_dir ?? "");
+    $("#max-concurrent").value = String(settings.max_concurrent ?? 3);
+    $("#auto-resume").checked = Boolean(settings.auto_resume);
+    settingsPanel.hidden = false;
+    settingsToggle.setAttribute("aria-expanded", "true");
+    showSettingsNotice("");
+  } catch (error) {
+    showSettingsNotice(String(error), "error");
+  } finally {
+    settingsToggle.disabled = false;
+  }
+}
+
+settingsToggle.addEventListener("click", async () => {
+  if (!settingsPanel.hidden) {
+    settingsPanel.hidden = true;
+    settingsToggle.setAttribute("aria-expanded", "false");
+    return;
+  }
+  await openSettings();
+});
+
+$("#settings-cancel").addEventListener("click", () => {
+  settingsPanel.hidden = true;
+  settingsToggle.setAttribute("aria-expanded", "false");
+  showSettingsNotice("");
+});
+
+settingsForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const downloadDir = $("#download-dir").value.trim();
+  const maxConcurrent = Number($("#max-concurrent").value);
+  const autoResume = $("#auto-resume").checked;
+  if (!downloadDir) {
+    showSettingsNotice("Download folder cannot be empty.", "error");
+    return;
+  }
+  if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1 || maxConcurrent > 16) {
+    showSettingsNotice("Concurrent downloads must be between 1 and 16.", "error");
+    return;
+  }
+
+  const submit = settingsForm.querySelector("button[type=submit]");
+  submit.disabled = true;
+  showSettingsNotice("Saving settings…");
+  try {
+    await invoke("update_settings", {
+      downloadDir,
+      maxConcurrent,
+      autoResume
+    });
+    showSettingsNotice("Settings saved.", "success");
+  } catch (error) {
+    showSettingsNotice(String(error), "error");
   } finally {
     submit.disabled = false;
   }
