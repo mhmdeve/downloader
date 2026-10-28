@@ -1,9 +1,9 @@
 use std::{fs, path::Path};
 
 fn main() {
-    // Tauri's context macro and Windows resource compiler expect platform icon
-    // files even during `cargo test`. Keep a tiny valid placeholder generated
-    // at build time so clean checkouts can compile without committed binaries.
+    // Tauri expects platform icon assets even during `cargo test`. Generate
+    // valid placeholder files for clean checkouts; replace with real artwork
+    // before the first production release.
     let icons = Path::new("icons");
     fs::create_dir_all(icons).expect("create Tauri icons directory");
 
@@ -14,7 +14,7 @@ fn main() {
         0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
         0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89,
         0x00, 0x00, 0x00, 0x0B, b'I', b'D', b'A', b'T',
-        0x78, 0x9C, 0x63, 0x60, 0x00, 0x02, 0x00, 0x00, 0x05, 0x00, 0x01,
+        0x78, 0xDA, 0x63, 0x60, 0x00, 0x02, 0x00, 0x00, 0x05, 0x00, 0x01,
         0xA5, 0xF6, 0x45, 0x40,
         0x00, 0x00, 0x00, 0x00, b'I', b'E', b'N', b'D', 0xAE, 0x42, 0x60, 0x82,
     ];
@@ -27,8 +27,8 @@ fn main() {
     ico.extend_from_slice(png);
     fs::write(icons.join("icon.ico"), ico).expect("write placeholder ICO icon");
 
-    // ICNS container with a PNG-backed 16x16 icon entry. The image is a tiny
-    // placeholder for development/CI; production artwork will replace it.
+    // ICNS container with a PNG-backed icon entry. This placeholder is only
+    // intended to satisfy development/CI; production artwork will replace it.
     let mut icns = b"icns".to_vec();
     icns.extend_from_slice(&((16 + png.len()) as u32).to_be_bytes());
     icns.extend_from_slice(b"icp4");
