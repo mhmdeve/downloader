@@ -35,6 +35,37 @@
       <p id="notice" class="notice" role="status" aria-live="polite"></p>
     </section>
 
+    <section id="download-info-panel" class="settings-panel" aria-labelledby="download-info-title" hidden>
+      <div class="section-heading">
+        <div>
+          <h2 id="download-info-title">Download information</h2>
+          <p>Check the detected file details before adding it.</p>
+        </div>
+      </div>
+      <form id="download-info-form" class="settings-form">
+        <label for="info-filename">File name</label>
+        <input id="info-filename" name="filename" type="text" required maxlength="255">
+        <label for="info-category">Category</label>
+        <select id="info-category" name="category">
+          <option value="compressed">Compressed</option>
+          <option value="documents">Documents</option>
+          <option value="music">Music</option>
+          <option value="programs">Programs</option>
+          <option value="video">Video</option>
+          <option value="images">Images</option>
+          <option value="other">Other</option>
+        </select>
+        <label for="info-directory">Save to folder</label>
+        <input id="info-directory" name="directory" type="text" required maxlength="4096" spellcheck="false">
+        <div id="info-summary" class="download-meta"></div>
+        <div class="settings-actions">
+          <button class="button button-primary" type="submit">Start download</button>
+          <button id="info-cancel" class="button button-quiet" type="button">Cancel</button>
+        </div>
+        <p id="info-notice" class="notice" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+
     <section id="settings-panel" class="settings-panel" aria-labelledby="settings-title" hidden>
       <div class="section-heading">
         <div>
