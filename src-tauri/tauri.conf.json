@@ -24,7 +24,7 @@
   },
   "bundle": {
     "active": true,
-    "icon": [],
+    "icon": ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"],
     "category": "Utility",
     "shortDescription": "Cross-platform download manager",
     "targets": "all"
