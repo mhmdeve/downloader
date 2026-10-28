@@ -20,6 +20,17 @@ fn list_downloads(state: State<'_, AppState>) -> Vec<ItemView> {
 }
 
 #[tauri::command]
+async fn inspect_download(state: State<'_, AppState>, url: String) -> Result<idl_core::manager::Inspection, String> {
+    let parsed = url::Url::parse(&url).map_err(|_| "Enter a valid HTTP(S) URL.".to_string())?;
+    if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none()
+        || !parsed.username().is_empty() || parsed.password().is_some()
+    {
+        return Err("Only HTTP(S) URLs without embedded credentials are supported.".into());
+    }
+    state.manager.inspect(&RequestInfo::new(url)).await.map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 async fn add_download(state: State<'_, AppState>, url: String) -> Result<AddResult, String> {
     let parsed = url::Url::parse(&url).map_err(|_| "Enter a valid HTTP(S) URL.".to_string())?;
     if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none()
@@ -117,6 +128,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             list_downloads,
+            inspect_download,
             add_download,
             get_settings,
             update_settings,
