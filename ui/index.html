@@ -16,7 +16,10 @@
         <h1>Internet Downloader</h1>
         <p>Fast downloads. Under your control.</p>
       </div>
-      <button id="refresh-button" class="button button-quiet" type="button">Refresh</button>
+      <div class="topbar-actions">
+        <button id="settings-toggle" class="button button-quiet" type="button" aria-expanded="false" aria-controls="settings-panel">Settings</button>
+        <button id="refresh-button" class="button button-quiet" type="button">Refresh</button>
+      </div>
     </header>
 
     <section class="add-panel" aria-labelledby="add-title">
@@ -30,6 +33,41 @@
         <button class="button button-primary" type="submit">Add download</button>
       </form>
       <p id="notice" class="notice" role="status" aria-live="polite"></p>
+    </section>
+
+    <section id="settings-panel" class="settings-panel" aria-labelledby="settings-title" hidden>
+      <div class="section-heading">
+        <div>
+          <h2 id="settings-title">Settings</h2>
+          <p>Configure where downloads are saved and how they resume.</p>
+        </div>
+      </div>
+      <form id="settings-form" class="settings-form">
+        <label for="download-dir">Download folder</label>
+        <input id="download-dir" name="downloadDir" type="text" required maxlength="4096" autocomplete="off" spellcheck="false">
+        <label for="max-concurrent">Maximum simultaneous downloads</label>
+        <select id="max-concurrent" name="maxConcurrent">
+          <option value="1">1 download</option>
+          <option value="2">2 downloads</option>
+          <option value="3">3 downloads</option>
+          <option value="4">4 downloads</option>
+          <option value="5">5 downloads</option>
+          <option value="6">6 downloads</option>
+          <option value="8">8 downloads</option>
+          <option value="10">10 downloads</option>
+          <option value="12">12 downloads</option>
+          <option value="16">16 downloads</option>
+        </select>
+        <label class="settings-checkbox" for="auto-resume">
+          <input id="auto-resume" name="autoResume" type="checkbox">
+          Resume unfinished downloads when the app starts
+        </label>
+        <div class="settings-actions">
+          <button class="button button-primary" type="submit">Save settings</button>
+          <button id="settings-cancel" class="button button-quiet" type="button">Cancel</button>
+        </div>
+        <p id="settings-notice" class="notice" role="status" aria-live="polite"></p>
+      </form>
     </section>
 
     <section class="downloads-panel" aria-labelledby="downloads-title">
