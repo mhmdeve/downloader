@@ -10,6 +10,10 @@ const settingsToggle = $("#settings-toggle");
 const settingsPanel = $("#settings-panel");
 const settingsForm = $("#settings-form");
 const settingsNotice = $("#settings-notice");
+const infoPanel = $("#download-info-panel");
+const infoForm = $("#download-info-form");
+const infoNotice = $("#info-notice");
+let pendingDownloadUrl = "";
 
 function showNotice(message, type = "") {
   notice.textContent = message;
@@ -145,20 +149,70 @@ async function refresh() {
   }
 }
 
+function showInfoNotice(message, type = "") {
+  infoNotice.textContent = message;
+  infoNotice.className = `notice ${type}`.trim();
+}
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const url = urlInput.value.trim();
   if (!url) return;
   const submit = form.querySelector("button[type=submit]");
   submit.disabled = true;
-  showNotice("Adding download…");
+  showNotice("Checking download details…");
   try {
-    await invoke("add_download", { url });
+    const info = await invoke("inspect_download", { url });
+    pendingDownloadUrl = url;
+    $("#info-filename").value = info.probe?.filename ?? "";
+    $("#info-directory").value = info.dir ?? "";
+    $("#info-category").value = info.category ?? "other";
+    const size = info.probe?.size == null ? "Unknown size" : formatBytes(info.probe.size);
+    const range = info.probe?.accepts_ranges ? "Resume and multi-connection supported" : "Server does not support range requests";
+    const kind = info.kind === "hls" ? "HLS video stream" : "Direct file";
+    $("#info-summary").textContent = `${kind} · ${size} · ${range}`;
+    infoPanel.hidden = false;
+    showInfoNotice("");
+    showNotice("Review the details, then start the download.");
+  } catch (error) {
+    showNotice(String(error), "error");
+  } finally {
+    submit.disabled = false;
+  }
+});
+
+$("#info-cancel").addEventListener("click", () => {
+  infoPanel.hidden = true;
+  pendingDownloadUrl = "";
+  showInfoNotice("");
+});
+
+infoForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!pendingDownloadUrl) {
+    showInfoNotice("Enter a URL and inspect it first.", "error");
+    return;
+  }
+  const filename = $("#info-filename").value.trim();
+  const directory = $("#info-directory").value.trim();
+  const category = $("#info-category").value;
+  if (!filename || !directory) {
+    showInfoNotice("File name and destination folder are required.", "error");
+    return;
+  }
+  const submit = infoForm.querySelector("button[type=submit]");
+  submit.disabled = true;
+  showInfoNotice("Adding download…");
+  try {
+    await invoke("add_download", { url: pendingDownloadUrl, filename, directory, category });
     urlInput.value = "";
+    pendingDownloadUrl = "";
+    infoPanel.hidden = true;
+    showInfoNotice("");
     showNotice("Download added to the queue.", "success");
     await refresh();
   } catch (error) {
-    showNotice(String(error), "error");
+    showInfoNotice(String(error), "error");
   } finally {
     submit.disabled = false;
   }
