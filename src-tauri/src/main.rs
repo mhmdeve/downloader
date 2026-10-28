@@ -2,6 +2,7 @@
 
 use idl_core::{
     manager::{AddRequest, AddResult, ItemView, Manager, StartMode},
+    settings::Settings,
     types::RequestInfo,
 };
 use idl_ipc::IpcServer;
@@ -31,6 +32,39 @@ async fn add_download(state: State<'_, AppState>, url: String) -> Result<AddResu
         start: StartMode::Now,
         ..Default::default()
     }).await.map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn get_settings(state: State<'_, AppState>) -> Settings {
+    state.manager.settings()
+}
+
+#[tauri::command]
+fn update_settings(
+    state: State<'_, AppState>,
+    download_dir: String,
+    max_concurrent: u32,
+    auto_resume: bool,
+) -> Result<(), String> {
+    let download_dir = download_dir.trim();
+    if download_dir.is_empty() {
+        return Err("Download folder cannot be empty.".into());
+    }
+    if download_dir.len() > 4096 {
+        return Err("Download folder path is too long.".into());
+    }
+    if download_dir.contains('\0') {
+        return Err("Download folder path contains an invalid character.".into());
+    }
+    if !(1..=16).contains(&max_concurrent) {
+        return Err("Concurrent downloads must be between 1 and 16.".into());
+    }
+
+    let mut settings = state.manager.settings();
+    settings.download_dir = std::path::PathBuf::from(download_dir);
+    settings.max_concurrent = max_concurrent;
+    settings.auto_resume = auto_resume;
+    state.manager.update_settings(settings).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -84,6 +118,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             list_downloads,
             add_download,
+            get_settings,
+            update_settings,
             pause_download,
             resume_download,
             remove_download,
