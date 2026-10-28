@@ -73,7 +73,7 @@ function renderDownloads(items) {
     const speed = document.createElement("span");
     speed.textContent = status === "downloading" ? `${formatBytes(view.speed ?? 0)}/s` : "";
     const eta = document.createElement("span");
-    eta.textContent = status === "downloading" && Number.isFinite(Number(view.eta))
+    eta.textContent = status === "downloading" && view.eta != null && Number.isFinite(Number(view.eta))
       ? `${Math.max(0, Number(view.eta))}s left`
       : "";
     meta.append(state, size, speed, eta);
