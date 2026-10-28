@@ -49,6 +49,7 @@ h2 { font-size: 17px; letter-spacing: -.02em; }
 .download-url-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 5px; color: var(--muted); font-size: 12px; }
 .progress-track { height: 5px; margin-top: 13px; border-radius: 99px; overflow: hidden; background: #303746; }
 .progress-fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent-strong), #75c4ff); transition: width .25s ease; }
+.download-error { margin-top: 8px; color: var(--danger); font-size: 12px; overflow-wrap: anywhere; }
 .download-meta { display: flex; flex-wrap: wrap; gap: 9px 15px; margin-top: 8px; color: var(--muted); font-size: 11px; }
 .status { display: inline-flex; align-items: center; gap: 6px; }
 .status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
